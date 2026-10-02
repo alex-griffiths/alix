@@ -413,6 +413,8 @@ impl MappableCommand {
         syntax_symbol_picker, "Open symbol picker from syntax information",
         lsp_or_syntax_symbol_picker, "Open symbol picker from LSP or syntax information",
         changed_file_picker, "Open changed file picker",
+        toggle_inline_blame, "Toggle inline blame of the cursor line",
+        show_blame_commit, "Show the commit that last changed the cursor line (vsplit)",
         select_references_to_symbol_under_cursor, "Select symbol references",
         workspace_symbol_picker, "Open workspace symbol picker",
         syntax_workspace_symbol_picker, "Open workspace symbol picker from syntax information",
@@ -3477,6 +3479,76 @@ fn jumplist_picker(cx: &mut Context) {
         Some((meta.id.into(), Some((line, line))))
     });
     cx.push_layer(Box::new(overlaid(picker)));
+}
+
+fn toggle_inline_blame(cx: &mut Context) {
+    let mut config = cx.editor.config().clone();
+    config.inline_blame.enable = !config.inline_blame.enable;
+    let enabled = config.inline_blame.enable;
+    if let Err(err) = cx
+        .editor
+        .config_events
+        .0
+        .send(helix_view::editor::ConfigEvent::Update(Box::new(config)))
+    {
+        cx.editor.set_error(err.to_string());
+        return;
+    }
+
+    let doc_id = doc!(cx.editor).id();
+    if enabled && !crate::handlers::blame::blame_trusted(cx.editor, doc_id) {
+        cx.editor.set_status(
+            "Inline blame enabled, but jj/git are not run in untrusted workspaces. \
+             Use `:workspace-trust` to allow it.",
+        );
+    } else {
+        cx.editor.set_status(if enabled {
+            "Inline blame enabled"
+        } else {
+            "Inline blame disabled"
+        });
+    }
+}
+
+/// Opens the diff of the commit which last changed the cursor line in a vertical split.
+fn show_blame_commit(cx: &mut Context) {
+    let (view, doc) = current_ref!(cx.editor);
+    let text = doc.text().slice(..);
+    let line = doc.selection(view.id).primary().cursor_line(text);
+    let Some((blame, commit)) = doc.blame_for_line(line) else {
+        let msg = if !cx.editor.config().inline_blame.enable {
+            "Inline blame is disabled"
+        } else if !crate::handlers::blame::blame_trusted(cx.editor, doc.id()) {
+            "No blame information: workspace is not trusted (see `:workspace-trust`)"
+        } else {
+            "No blame information for this line"
+        };
+        cx.editor.set_error(msg);
+        return;
+    };
+    let blame = blame.clone();
+    let commit = commit.clone();
+
+    cx.jobs.callback(async move {
+        let output = tokio::task::spawn_blocking(move || blame.show_commit(&commit)).await??;
+        Ok(Callback::EditorCompositor(Box::new(
+            move |editor: &mut Editor, _: &mut Compositor| {
+                let mut doc = Document::from(
+                    Rope::from(output),
+                    None,
+                    editor.config.clone(),
+                    editor.syn_loader.clone(),
+                );
+                let loader = editor.syn_loader.load();
+                if let Err(err) = doc.set_language_by_language_id("diff", &loader) {
+                    log::debug!("failed to set diff language: {err}");
+                }
+                drop(loader);
+                doc.readonly = true;
+                editor.new_file_from_document(Action::VerticalSplit, doc);
+            },
+        )))
+    });
 }
 
 fn changed_file_picker(cx: &mut Context) {

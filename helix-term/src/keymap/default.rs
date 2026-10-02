@@ -234,6 +234,8 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "d" => diagnostics_picker,
             "D" => workspace_diagnostics_picker,
             "g" => changed_file_picker,
+            "B" => toggle_inline_blame,
+            "i" => show_blame_commit,
             "a" => code_action,
             "'" => last_picker,
             "G" => { "Debug (experimental)" sticky=true

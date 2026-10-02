@@ -205,6 +205,11 @@ impl EditorView {
             inline_diagnostic_config,
             config.end_of_line_diagnostics,
         ));
+        if is_focused && config.inline_blame.enable {
+            if let Some(blame) = Self::inline_blame(doc, theme, primary_cursor, &config) {
+                decorations.add_decoration(blame);
+            }
+        }
         render_document(
             surface,
             inner,
@@ -841,6 +846,27 @@ impl EditorView {
     }
 
     /// Apply the highlighting on the lines where a cursor is active
+    /// Blame information for the line of the primary cursor.
+    fn inline_blame(
+        doc: &Document,
+        theme: &Theme,
+        primary_cursor: usize,
+        config: &helix_view::editor::Config,
+    ) -> Option<text_decorations::InlineBlame> {
+        let text = doc.text().slice(..);
+        let line = text.char_to_line(primary_cursor.min(text.len_chars()));
+        let (_, commit) = doc.blame_for_line(line)?;
+        let blame_config = &config.inline_blame;
+        let content = commit.format(&blame_config.format, &blame_config.date_format);
+        let style = theme
+            .try_get_exact("ui.virtual.inline-blame")
+            .unwrap_or_else(|| theme.get("ui.virtual.inlay-hint"));
+        let line_end = helix_core::line_ending::line_end_char_index(&text, line);
+        Some(text_decorations::InlineBlame::new(
+            content, style, line, line_end,
+        ))
+    }
+
     pub fn cursorline(doc: &Document, view: &View, theme: &Theme) -> impl Decoration {
         let text = doc.text().slice(..);
         // TODO only highlight the visual line that contains the cursor instead of the full visual line
@@ -1595,6 +1621,8 @@ impl Component for EditorView {
             Event::IdleTimeout => self.handle_idle_timeout(&mut cx),
             Event::FocusGained => {
                 self.terminal_focused = true;
+                // commits might have been created while helix was in the background
+                crate::handlers::blame::refresh_visible(context.editor);
                 EventResult::Consumed(None)
             }
             Event::FocusLost => {

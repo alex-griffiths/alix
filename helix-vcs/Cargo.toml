@@ -20,6 +20,7 @@ arc-swap.workspace = true
 gix = { version = "0.85.0", features = ["attributes", "status", "max-performance", "sha1"], default-features = false, optional = true }
 imara-diff =  "0.2.0"
 anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["alloc", "std"] }
 
 log = "0.4"
 

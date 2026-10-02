@@ -434,6 +434,57 @@ pub struct Config {
     pub buffer_picker: BufferPickerConfig,
     /// Workspace-trust configuration.
     pub workspace_trust: WorkspaceTrustConfig,
+    /// Show who last changed the line the cursor is on.
+    pub inline_blame: InlineBlameConfig,
+}
+
+/// Configuration for `[editor.inline-blame]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
+pub struct InlineBlameConfig {
+    /// Whether to show blame information for the line under the primary cursor. Defaults to
+    /// `true`.
+    pub enable: bool,
+    /// Template used to render the blame annotation. Available placeholders: `{author}`,
+    /// `{email}`, `{date}`, `{time-ago}`, `{message}`, `{id}` (jj change id or short git commit
+    /// hash), `{commit-id}` and `{change-id}`.
+    pub format: String,
+    /// [chrono](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) format string
+    /// used to render `{date}`.
+    pub date_format: String,
+    /// Which VCS to ask for blame information. `auto` uses jj when a `.jj` directory is found and
+    /// git otherwise.
+    pub backend: BlameBackendConfig,
+}
+
+impl Default for InlineBlameConfig {
+    fn default() -> Self {
+        Self {
+            enable: true,
+            format: "{author} - {date}: {message} ({id})".to_string(),
+            date_format: "%Y-%m-%d".to_string(),
+            backend: BlameBackendConfig::Auto,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BlameBackendConfig {
+    #[default]
+    Auto,
+    Jj,
+    Git,
+}
+
+impl From<BlameBackendConfig> for helix_vcs::BlameBackendPreference {
+    fn from(config: BlameBackendConfig) -> Self {
+        match config {
+            BlameBackendConfig::Auto => Self::Auto,
+            BlameBackendConfig::Jj => Self::Jj,
+            BlameBackendConfig::Git => Self::Git,
+        }
+    }
 }
 
 /// User-facing configuration for `[editor.workspace-trust]`.
@@ -1240,6 +1291,7 @@ impl Default for Config {
             kitty_keyboard_protocol: Default::default(),
             buffer_picker: BufferPickerConfig::default(),
             workspace_trust: WorkspaceTrustConfig::default(),
+            inline_blame: InlineBlameConfig::default(),
         }
     }
 }
@@ -2061,7 +2113,7 @@ impl Editor {
         id
     }
 
-    fn new_file_from_document(&mut self, action: Action, doc: Document) -> DocumentId {
+    pub fn new_file_from_document(&mut self, action: Action, doc: Document) -> DocumentId {
         let id = self.new_document(doc);
         self.switch(id, action);
         id

@@ -6,8 +6,10 @@ use helix_view::editor::CursorCache;
 
 use crate::ui::document::{LinePos, TextRenderer};
 
+pub use blame::InlineBlame;
 pub use diagnostics::InlineDiagnostics;
 
+mod blame;
 mod diagnostics;
 
 /// Decorations are the primary mechanism for extending the text rendering.

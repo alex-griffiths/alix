@@ -1603,6 +1603,8 @@ fn reload(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyh
             .file_event_handler
             .file_changed(path);
     }
+    let doc_id = doc.id();
+    crate::handlers::blame::request_blame(cx.editor, doc_id);
     Ok(())
 }
 
@@ -1672,6 +1674,7 @@ fn reload_all(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> 
                 view.ensure_cursor_in_view(doc, scrolloff);
             }
         }
+        crate::handlers::blame::request_blame(cx.editor, doc_id);
     }
 
     Ok(())

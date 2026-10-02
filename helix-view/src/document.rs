@@ -15,7 +15,7 @@ use helix_core::text_annotations::{InlineAnnotation, Overlay};
 use helix_event::TaskController;
 use helix_lsp::util::lsp_pos_to_pos;
 use helix_stdx::faccess::{copy_metadata, readonly};
-use helix_vcs::{DiffHandle, DiffProviderRegistry};
+use helix_vcs::{BlameCommit, DiffHandle, DiffProviderRegistry, FileBlame};
 use std::sync::OnceLock;
 use thiserror;
 
@@ -208,6 +208,8 @@ pub struct Document {
 
     diff_handle: Option<DiffHandle>,
     version_control_head: Option<Arc<ArcSwap<Box<str>>>>,
+    blame: Option<DocumentBlame>,
+    blame_request: u64,
 
     // when document was used for most-recent-used buffer picker
     pub focused_at: std::time::Instant,
@@ -256,6 +258,14 @@ pub struct DocumentLink {
     pub end: usize,
     pub link: lsp::DocumentLink,
     pub language_server_id: LanguageServerId,
+}
+
+/// Blame information of a document together with a mapping of the document's lines to the
+/// blamed lines.
+#[derive(Debug, Clone)]
+struct DocumentBlame {
+    blame: Arc<FileBlame>,
+    lines: Vec<Option<u32>>,
 }
 
 /// Inlay hints for a single `(Document, View)` combo.
@@ -762,6 +772,8 @@ impl Document {
             diff_handle: None,
             config,
             version_control_head: None,
+            blame: None,
+            blame_request: 0,
             focused_at: std::time::Instant::now(),
             readonly: false,
             jump_labels: HashMap::new(),
@@ -1530,6 +1542,10 @@ impl Document {
             diff_handle.update_document(self.text.clone(), false);
         }
 
+        if let Some(blame) = &mut self.blame {
+            helix_vcs::remap_lines(&mut blame.lines, &old_doc, changes);
+        }
+
         // map diagnostics over changes too
         changes.update_positions(self.diagnostics.iter_mut().map(|diagnostic| {
             let assoc = if diagnostic.starts_at_word {
@@ -2000,6 +2016,46 @@ impl Document {
         } else {
             self.diff_handle = None;
         }
+    }
+
+    /// Starts a new blame request. Results of older requests are discarded by
+    /// [`Document::set_blame`].
+    pub fn start_blame_request(&mut self) -> u64 {
+        self.blame_request += 1;
+        self.blame_request
+    }
+
+    /// Sets the blame information for this document, unless a newer request was started after
+    /// `request`. Returns whether the blame was applied.
+    pub fn set_blame(&mut self, request: u64, blame: Option<Arc<FileBlame>>) -> bool {
+        if request != self.blame_request {
+            return false;
+        }
+        self.blame = blame.map(|blame| DocumentBlame {
+            lines: blame.map_lines(&self.text),
+            blame,
+        });
+        true
+    }
+
+    pub fn clear_blame(&mut self) {
+        self.blame_request += 1;
+        self.blame = None;
+    }
+
+    pub fn has_blame(&self) -> bool {
+        self.blame.is_some()
+    }
+
+    /// Returns the commit which last changed `line`.
+    pub fn blame_for_line(&self, line: usize) -> Option<(&Arc<FileBlame>, &BlameCommit)> {
+        let blame = self.blame.as_ref()?;
+        let mapping = *blame.lines.get(line)?;
+        // The empty line after a trailing newline doesn't really exist.
+        if line + 1 == self.text.len_lines() && self.text.line(line).len_chars() == 0 {
+            return None;
+        }
+        Some((&blame.blame, blame.blame.commit(mapping)?))
     }
 
     pub fn version_control_head(&self) -> Option<Arc<Box<str>>> {

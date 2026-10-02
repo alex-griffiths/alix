@@ -520,6 +520,51 @@ fn main() {
 }
 ```
 
+### `[editor.inline-blame]` Section
+
+Shows who last changed the line under the primary cursor as virtual text at the end of the line,
+similar to an inlay hint:
+
+```text
+fn main() {
+    println!("hello world");  Jane Doe - 2026-10-02: say hello world (vuzzrnpt)
+}
+```
+
+Blame information is obtained from [jj](https://jj-vcs.github.io/jj/) if the file is inside a
+`.jj` workspace and from git otherwise. Lines that were changed since the last commit are
+attributed to the working-copy change in jj and shown as `Not committed yet` in git. Because the
+`jj`/`git` CLI reads repository-local configuration, blame is only shown in workspaces trusted with
+`:workspace-trust` (see [workspace trust](./workspace-trust.md)).
+
+| Key           | Description | Default |
+|---------------|-------------|---------|
+| `enable`      | Whether to show the annotation. Can be toggled at runtime with `toggle_inline_blame` (`Space-B`). | `true` |
+| `format`      | Template of the annotation, see the placeholders below. Use `{{` and `}}` for literal braces. | `"{author} - {date}: {message} ({id})"` |
+| `date-format` | [strftime](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) format used for `{date}`. | `"%Y-%m-%d"` |
+| `backend`     | Which VCS to use: `auto`, `jj` or `git`. | `"auto"` |
+
+| Placeholder   | Value |
+|---------------|-------|
+| `{author}`    | Author name |
+| `{email}`     | Author email |
+| `{date}`      | Author date, formatted with `date-format` |
+| `{time-ago}`  | Author date relative to now, e.g. `3 days ago` |
+| `{message}`   | First line of the commit message |
+| `{id}`        | jj change id, or the short commit hash for git |
+| `{commit-id}` | Short commit hash |
+| `{change-id}` | jj change id (empty for git) |
+
+`show_blame_commit` (`Space-i`) opens the commit that last changed the cursor line in a vertical
+split.
+
+Example:
+
+```toml
+[editor.inline-blame]
+format = "{author}, {time-ago} • {message}"
+```
+
 ### `[editor.word-completion]` Section
 
 Options for controlling completion of words from open buffers.

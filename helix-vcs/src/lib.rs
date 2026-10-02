@@ -12,8 +12,13 @@ use std::{
 #[cfg(feature = "git")]
 mod git;
 
+mod blame;
 mod diff;
 
+pub use blame::{
+    blame_file, detect_backend, remap_lines, BlameBackend, BlameBackendPreference, BlameCommit,
+    FileBlame, FORMAT_PLACEHOLDERS as BLAME_FORMAT_PLACEHOLDERS,
+};
 pub use diff::{DiffHandle, Hunk};
 
 mod status;
