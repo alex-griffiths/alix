@@ -83,5 +83,5 @@ in
       cp ${./contrib/helix.png} $out/share/icons/hicolor/256x256/apps/helix.png
     '';
 
-    meta.mainProgram = "hx";
+    meta.mainProgram = "ax";
   })

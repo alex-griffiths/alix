@@ -38,7 +38,7 @@ async fn main_impl() -> Result<i32> {
 {}
 
 USAGE:
-    hx [FLAGS] [files]...
+    ax [FLAGS] [files]...
 
 ARGS:
     <files>...    Set the input file to use, position can also be specified via file[:row[:col]]
