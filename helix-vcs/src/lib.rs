@@ -14,6 +14,7 @@ mod git;
 
 mod blame;
 mod diff;
+mod jj;
 
 pub use blame::{
     blame_file, detect_backend, remap_lines, BlameBackend, BlameBackendPreference, BlameCommit,
@@ -75,6 +76,17 @@ impl DiffProviderRegistry {
         f: impl Fn(Result<FileChange>) -> bool + Send + 'static,
     ) {
         tokio::task::spawn_blocking(move || {
+            // In a jj workspace (including a colocated jj/git repo) jj owns the working-copy
+            // change, so ask it directly: git's index is stale there and would report unchanged
+            // files as modified. Fall back to the git providers only when jj is absent or errors.
+            if jj::workspace_root(&cwd).is_some() {
+                match jj::for_each_changed_file(&cwd, &f) {
+                    Ok(()) => return,
+                    Err(err) => {
+                        log::debug!("jj changed-file listing failed, falling back to git: {err:#}")
+                    }
+                }
+            }
             if self
                 .providers
                 .iter()
